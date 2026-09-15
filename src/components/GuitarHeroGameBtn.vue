@@ -27,17 +27,16 @@
     <!-- FRETBOARD / GAMEFIELD -->
     <div class="fretboard" :class="{ 'fretboard-active': isPlaying }">
       
-      <!-- FALLING NOTES -->
-      <div 
-        v-for="note in activeNotes" 
-        :key="note.id"
-        class="falling-note"
-        :class="'note-lane-' + note.lane"
-        :style="{ top: note.y + 'px' }"
-      ></div>
-
       <!-- 1. Lane (Green) -->
       <div class="lane lane-green">
+        <!-- A hangjegyek mostantól a sávon BELÜL vannak, így képtelenek elcsúszni jobbra-balra! -->
+        <div 
+          v-for="note in activeNotes.filter(n => n.lane === 0)" 
+          :key="note.id"
+          class="falling-note note-green"
+          :style="{ top: note.y + 'px' }"
+        ></div>
+        
         <div 
           class="hit-zone zone-green" 
           :class="{ 'zone-active': activeLanes[0] }"
@@ -49,6 +48,13 @@
       <!-- 2. Lane (Red) -->
       <div class="lane lane-red">
         <div 
+          v-for="note in activeNotes.filter(n => n.lane === 1)" 
+          :key="note.id"
+          class="falling-note note-red"
+          :style="{ top: note.y + 'px' }"
+        ></div>
+        
+        <div 
           class="hit-zone zone-red" 
           :class="{ 'zone-active': activeLanes[1] }"
           @mousedown="handlePress(1)"
@@ -59,6 +65,13 @@
       <!-- 3. Lane (Yellow) -->
       <div class="lane lane-yellow">
         <div 
+          v-for="note in activeNotes.filter(n => n.lane === 2)" 
+          :key="note.id"
+          class="falling-note note-yellow"
+          :style="{ top: note.y + 'px' }"
+        ></div>
+        
+        <div 
           class="hit-zone zone-yellow" 
           :class="{ 'zone-active': activeLanes[2] }"
           @mousedown="handlePress(2)"
@@ -68,6 +81,13 @@
       
       <!-- 4. Lane (Blue) -->
       <div class="lane lane-blue">
+        <div 
+          v-for="note in activeNotes.filter(n => n.lane === 3)" 
+          :key="note.id"
+          class="falling-note note-blue"
+          :style="{ top: note.y + 'px' }"
+        ></div>
+        
         <div 
           class="hit-zone zone-blue" 
           :class="{ 'zone-active': activeLanes[3] }"
@@ -87,6 +107,7 @@
 
   </div>
 </template>
+
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 
@@ -99,13 +120,12 @@ const props = defineProps({
 
 const emit = defineEmits(['convert-points'])
 
-// Engine constants
+// Speciális motorbeállítások a stabil mobilos futáshoz
 const FRETBOARD_HEIGHT = 400
 const HIT_ZONE_Y = 320
 const HIT_WINDOW = 25
-const NOTE_SPEED = 4
+const NOTE_SPEED = 0.25 // Pixels per millisecond (időalapú mozgáshoz)
 
-// Reactive states
 const isPlaying = ref(false)
 const gameScore = ref(0)
 const activeLanes = ref([false, false, false, false])
@@ -115,12 +135,10 @@ let gameLoopId = null
 let noteSpawnerId = null
 let noteIdCounter = 0
 let audioPlayer = null
-
-// --- TOETSENBORD LOGICA (NIEUW) ---
+let lastFrameTime = 0 // Időkövető változó az egyenletes sebességért
+// Keyboard inputs
 function handleKeyDown(e) {
-  // We luisteren alleen naar toetsen als de game echt actief is
   if (!isPlaying.value) return
-
   switch(e.key.toLowerCase()) {
     case 'd': handlePress(0); break;
     case 'f': handlePress(1); break;
@@ -129,18 +147,16 @@ function handleKeyDown(e) {
   }
 }
 
-// Luisteraars activeren wanneer de component wordt geladen
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
 })
 
-// Luisteraars netjes opruimen bij het verlaten van het scherm
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   stopGame()
 })
 
-// --- GAME CORE LOGICA ---
+// Mathematical seed generation
 function getSongSeed(str) {
   let hash = 0
   if (!str || str.length === 0) return 12345
@@ -163,6 +179,7 @@ function toggleGame() {
   if (isPlaying.value) {
     gameScore.value = 0
     activeNotes.value = []
+    lastFrameTime = performance.now() // Reset time tracker
     startAudio()
     startGameLoop()
     startSpawningNotes()
@@ -190,16 +207,29 @@ function stopGame() {
   }
 }
 
+// 1. DELTA-TIME GAME LOOP - Perfectly smooth on any screen or CPU lag (60Hz, 120Hz, Mobile Touch)
 function startGameLoop() {
-  function update() {
+  function update(currentTime) {
     if (!isPlaying.value) return
-    activeNotes.value.forEach(note => { note.y += NOTE_SPEED })
+
+    // Calculate time elapsed since last frame in milliseconds
+    const deltaTime = currentTime - lastFrameTime
+    lastFrameTime = currentTime
+
+    // Move notes based on actual time elapsed, not frames!
+    activeNotes.value.forEach(note => {
+      note.y += NOTE_SPEED * deltaTime
+    })
+
+    // Filter out missed notes
     activeNotes.value = activeNotes.value.filter(note => note.y <= FRETBOARD_HEIGHT)
+
     gameLoopId = requestAnimationFrame(update)
   }
   gameLoopId = requestAnimationFrame(update)
 }
 
+// 2. STABLE BEAT SPAWNER
 function startSpawningNotes() {
   const songBPM = getSongBPM()
   const beatInterval = 60000 / songBPM
@@ -220,6 +250,7 @@ function startSpawningNotes() {
   }, beatInterval)
 }
 
+// 3. HIT CHECK
 function handlePress(laneIndex) {
   activeLanes.value[laneIndex] = true
   setTimeout(() => { activeLanes.value[laneIndex] = false }, 100)
@@ -317,6 +348,7 @@ function claimCoins() {
   box-shadow: 0 0 15px rgba(255, 69, 0, 0.15);
 }
 
+/* RESPONSIVE FALLING NOTES (INSIDE LANES) */
 .falling-note {
   position: absolute;
   width: 45px;
@@ -325,12 +357,16 @@ function claimCoins() {
   box-shadow: 0 0 12px currentColor;
   z-index: 10;
   pointer-events: none;
+  /* Centering notes horizontally inside each lane automatically! */
+  left: 50%;
+  transform: translateX(-50%);
 }
 
-.note-lane-0 { left: 22px;  color: #00ff64; background-color: #00ff64; }
-.note-lane-1 { left: 112px; color: #ff3333; background-color: #ff3333; }
-.note-lane-2 { left: 202px; color: #ffcc00; background-color: #ffcc00; }
-.note-lane-3 { left: 292px; color: #0096ff; background-color: #0096ff; }
+/* Note colors */
+.note-green  { color: #00ff64; background-color: #00ff64; }
+.note-red    { color: #ff3333; background-color: #ff3333; }
+.note-yellow { color: #ffcc00; background-color: #ffcc00; }
+.note-blue   { color: #0096ff; background-color: #0096ff; }
 
 .lane {
   flex: 1;
@@ -360,7 +396,6 @@ function claimCoins() {
   box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.6);
   -webkit-tap-highlight-color: transparent;
   z-index: 5;
-  /* Tekst in de knoppen centreren (D, F, J, K) */
   display: flex;
   align-items: center;
   justify-content: center;
