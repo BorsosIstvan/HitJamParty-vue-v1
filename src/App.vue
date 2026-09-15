@@ -38,7 +38,7 @@
           <GuitarHeroGame 
             trackName="You Shook Me All Night Long" 
             artistName="AC/DC" 
-            musicUrl="/acdcYouShookMeAllNightLong.mp3" 
+            musicUrl="./acdcYouShookMeAllNightLong.mp3" 
             :bpm="127" 
             @convert-points="coins += $event" 
           />
