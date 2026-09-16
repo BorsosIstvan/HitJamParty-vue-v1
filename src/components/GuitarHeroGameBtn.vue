@@ -8,17 +8,30 @@
       <p class="song-artist">{{ artistName }}</p>
     </div>
 
-    <!-- GAME HEADER -->
+    <!-- GAME HEADER PANEL -->
     <div class="game-header">
-      <div class="score-display">
-        <span class="label">SCORE:</span>
+      
+      <!-- INTERAKTÍV PONTKÁRTYA: Most már szupergyorsan pörög le 100-asával -->
+      <div 
+        class="score-display-box"
+        :class="{ 
+          'score-claimable': gameScore >= 100 && !isPlaying && !isConverting,
+          'score-converting': isConverting 
+        }"
+        @click="claimCoins"
+      >
+        <span class="label">
+          {{ isConverting ? '⚡ CONVERTING...' : (gameScore >= 100 && !isPlaying ? '🪙 TAP TO CLAIM' : 'SCORE') }}
+        </span>
         <span class="value">{{ gameScore }}</span>
       </div>
 
+      <!-- START / STOP GAME BUTTON -->
       <button 
         @click="toggleGame" 
         class="hitjam-btn start-btn"
         :class="{ 'game-running': isPlaying }"
+        :disabled="isConverting"
       >
         {{ isPlaying ? '⏱️ STOP GAME' : '🎮 START GAME' }}
       </button>
@@ -27,16 +40,16 @@
     <!-- FRETBOARD / GAMEFIELD -->
     <div class="fretboard" :class="{ 'fretboard-active': isPlaying }">
       
+      <!-- A SZELLEM-KÓD TÖRÖLVE! A hangjegyek kizárólag a saját sávjaikban jelenhetnek meg -->
+
       <!-- 1. Lane (Green) -->
       <div class="lane lane-green">
-        <!-- A hangjegyek mostantól a sávon BELÜL vannak, így képtelenek elcsúszni jobbra-balra! -->
         <div 
           v-for="note in activeNotes.filter(n => n.lane === 0)" 
           :key="note.id"
           class="falling-note note-green"
           :style="{ top: note.y + 'px' }"
         ></div>
-        
         <div 
           class="hit-zone zone-green" 
           :class="{ 'zone-active': activeLanes[0] }"
@@ -53,7 +66,6 @@
           class="falling-note note-red"
           :style="{ top: note.y + 'px' }"
         ></div>
-        
         <div 
           class="hit-zone zone-red" 
           :class="{ 'zone-active': activeLanes[1] }"
@@ -70,7 +82,6 @@
           class="falling-note note-yellow"
           :style="{ top: note.y + 'px' }"
         ></div>
-        
         <div 
           class="hit-zone zone-yellow" 
           :class="{ 'zone-active': activeLanes[2] }"
@@ -87,7 +98,6 @@
           class="falling-note note-blue"
           :style="{ top: note.y + 'px' }"
         ></div>
-        
         <div 
           class="hit-zone zone-blue" 
           :class="{ 'zone-active': activeLanes[3] }"
@@ -96,13 +106,6 @@
         >K</div>
       </div>
 
-    </div>
-
-    <!-- CONVERSION PANEL -->
-    <div v-if="gameScore > 0" class="conversion-panel">
-      <button @click="claimCoins" class="hitjam-link-btn claim-btn">
-        💰 Convert Points to HitJam Coins
-      </button>
     </div>
 
   </div>
@@ -120,13 +123,13 @@ const props = defineProps({
 
 const emit = defineEmits(['convert-points'])
 
-// Speciális motorbeállítások a stabil mobilos futáshoz
 const FRETBOARD_HEIGHT = 400
 const HIT_ZONE_Y = 320
 const HIT_WINDOW = 25
-const NOTE_SPEED = 0.25 // Pixels per millisecond (időalapú mozgáshoz)
+const NOTE_SPEED = 0.25
 
 const isPlaying = ref(false)
+const isConverting = ref(false)
 const gameScore = ref(0)
 const activeLanes = ref([false, false, false, false])
 const activeNotes = ref([])
@@ -135,10 +138,10 @@ let gameLoopId = null
 let noteSpawnerId = null
 let noteIdCounter = 0
 let audioPlayer = null
-let lastFrameTime = 0 // Időkövető változó az egyenletes sebességért
+let lastFrameTime = 0
 // Keyboard inputs
 function handleKeyDown(e) {
-  if (!isPlaying.value) return
+  if (!isPlaying.value || isConverting.value) return
   switch(e.key.toLowerCase()) {
     case 'd': handlePress(0); break;
     case 'f': handlePress(1); break;
@@ -175,11 +178,13 @@ function getSongBPM() {
 }
 
 function toggleGame() {
+  if (isConverting.value) return
+  
   isPlaying.value = !isPlaying.value
   if (isPlaying.value) {
     gameScore.value = 0
     activeNotes.value = []
-    lastFrameTime = performance.now() // Reset time tracker
+    lastFrameTime = performance.now()
     startAudio()
     startGameLoop()
     startSpawningNotes()
@@ -207,29 +212,22 @@ function stopGame() {
   }
 }
 
-// 1. DELTA-TIME GAME LOOP - Perfectly smooth on any screen or CPU lag (60Hz, 120Hz, Mobile Touch)
 function startGameLoop() {
   function update(currentTime) {
     if (!isPlaying.value) return
-
-    // Calculate time elapsed since last frame in milliseconds
     const deltaTime = currentTime - lastFrameTime
     lastFrameTime = currentTime
 
-    // Move notes based on actual time elapsed, not frames!
     activeNotes.value.forEach(note => {
       note.y += NOTE_SPEED * deltaTime
     })
 
-    // Filter out missed notes
     activeNotes.value = activeNotes.value.filter(note => note.y <= FRETBOARD_HEIGHT)
-
     gameLoopId = requestAnimationFrame(update)
   }
   gameLoopId = requestAnimationFrame(update)
 }
 
-// 2. STABLE BEAT SPAWNER
 function startSpawningNotes() {
   const songBPM = getSongBPM()
   const beatInterval = 60000 / songBPM
@@ -250,12 +248,11 @@ function startSpawningNotes() {
   }, beatInterval)
 }
 
-// 3. HIT CHECK
 function handlePress(laneIndex) {
   activeLanes.value[laneIndex] = true
   setTimeout(() => { activeLanes.value[laneIndex] = false }, 100)
 
-  if (!isPlaying.value) return
+  if (!isPlaying.value || isConverting.value) return
 
   const targetNoteIndex = activeNotes.value.findIndex(note => {
     return note.lane === laneIndex && Math.abs(note.y - HIT_ZONE_Y) < HIT_WINDOW * 1.5
@@ -275,15 +272,28 @@ function handlePress(laneIndex) {
   }
 }
 
+// GEOPTIMALISEERDE SNELLE PONT-OMZETTER (100 PUNTEN PER STAP)
 function claimCoins() {
-  const earnedCoins = Math.floor(gameScore.value / 100)
-  if (earnedCoins > 0) {
-    alert(`🎉 Successfully converted! You earned 🪙 ${earnedCoins} HitJam Coins!`)
-    emit('convert-points', earnedCoins)
-    gameScore.value = 0
-  } else {
-    alert("⚠️ You need at least 100 points to convert into HitJam Coins!")
-  }
+  if (gameScore.value < 100 || isPlaying.value || isConverting.value) return
+
+  isConverting.value = true
+  
+  // We berekenen exact hoeveel we er maximaal af kunnen halen in stappen van 100
+  const totalPointsToConvert = gameScore.value - (gameScore.value % 100)
+  let pointsDeducted = 0
+
+  const conversionInterval = setInterval(() => {
+    if (pointsDeducted < totalPointsToConvert) {
+      gameScore.value -= 100 // Nu met 100 tegelijk naar beneden!
+      pointsDeducted += 100
+
+      // Direct 1 Coin doorgeven per 100 punten
+      emit('convert-points', 1)
+    } else {
+      clearInterval(conversionInterval)
+      isConverting.value = false
+    }
+  }, 50) // Elke 50 milliseconden flitst er 100 punten af, super snel en flitsend!
 }
 </script>
 
@@ -322,9 +332,56 @@ function claimCoins() {
   margin-bottom: 15px;
 }
 
-.score-display { display: flex; flex-direction: column; align-items: flex-start; font-family: monospace; }
-.score-display .label { font-size: 11px; letter-spacing: 1px; opacity: 0.6; }
-.score-display .value { font-size: 24px; font-weight: bold; color: #ff4500; text-shadow: 0 0 10px rgba(255, 69, 0, 0.4); }
+.score-display-box {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  font-family: monospace;
+  padding: 5px 12px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+}
+
+.score-display-box .label {
+  font-size: 11px;
+  letter-spacing: 1px;
+  opacity: 0.6;
+  transition: color 0.3s ease;
+}
+
+.score-display-box .value {
+  font-size: 24px;
+  font-weight: bold;
+  color: #ff4500;
+  text-shadow: 0 0 10px rgba(255, 69, 0, 0.4);
+}
+
+.score-claimable {
+  cursor: pointer;
+  background: rgba(0, 255, 100, 0.05);
+  border-color: #00ff64;
+  box-shadow: 0 0 10px rgba(0, 255, 100, 0.1);
+}
+.score-claimable:hover {
+  background: rgba(0, 255, 100, 0.15);
+  box-shadow: 0 0 15px rgba(0, 255, 100, 0.3);
+}
+.score-claimable .label {
+  color: #00ff64;
+  font-weight: bold;
+  opacity: 1;
+}
+
+.score-converting {
+  background: rgba(255, 69, 0, 0.1);
+  border-color: #ff4500;
+  box-shadow: 0 0 15px rgba(255, 69, 0, 0.2);
+}
+.score-converting .label {
+  color: #ff4500;
+  opacity: 1;
+}
 
 .start-btn { margin: 0 !important; padding: 8px 16px !important; font-size: 13px !important; border-radius: 20px !important; }
 .game-running { color: #ff3333 !important; border-color: #ff3333 !important; }
@@ -348,7 +405,6 @@ function claimCoins() {
   box-shadow: 0 0 15px rgba(255, 69, 0, 0.15);
 }
 
-/* RESPONSIVE FALLING NOTES (INSIDE LANES) */
 .falling-note {
   position: absolute;
   width: 45px;
@@ -357,12 +413,10 @@ function claimCoins() {
   box-shadow: 0 0 12px currentColor;
   z-index: 10;
   pointer-events: none;
-  /* Centering notes horizontally inside each lane automatically! */
   left: 50%;
   transform: translateX(-50%);
 }
 
-/* Note colors */
 .note-green  { color: #00ff64; background-color: #00ff64; }
 .note-red    { color: #ff3333; background-color: #ff3333; }
 .note-yellow { color: #ffcc00; background-color: #ffcc00; }
@@ -413,7 +467,4 @@ function claimCoins() {
 .zone-red.zone-active    { background-color: #ff3333; box-shadow: 0 0 25px #ff3333; transform: scale(0.92); color: #0b0c10; }
 .zone-yellow.zone-active { background-color: #ffcc00; box-shadow: 0 0 25px #ffcc00; transform: scale(0.92); color: #0b0c10; }
 .zone-blue.zone-active   { background-color: #0096ff; box-shadow: 0 0 25px #0096ff; transform: scale(0.92); color: #0b0c10; }
-
-.conversion-panel { margin-top: 10px; }
-.claim-btn { font-size: 13px !important; text-transform: uppercase; letter-spacing: 0.5px; }
 </style>
