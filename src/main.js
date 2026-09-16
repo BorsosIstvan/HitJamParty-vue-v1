@@ -1,13 +1,20 @@
-import { createApp } from 'vue'
-import { createPinia } from 'pinia'
 import './assets/main.css'
 
+import { createApp } from 'vue'
 import App from './App.vue'
-import router from './router'
+import { registerSW } from 'virtual:pwa-register' // 1. Importáljuk a SW regisztrálót
 
-const app = createApp(App)
+// 2. Regisztráljuk a Service Workert az azonnali frissítési logikáddal
+const updateSW = registerSW({
+  onNeedRefresh() {
+    console.log("🔥 Új HitJamParty verzió elérhető! Azonnali frissítés...");
+    // Ha van új kód a GitHub Pages-en, azonnal felülírjuk a régit:
+    updateSW(true)
+  },
+  onOfflineReady() {
+    console.log("📲 Az alkalmazás készen áll az offline játékra!")
+  }
+})
 
-app.use(createPinia())
-/*app.use(router)*/
-
-app.mount('#app')
+// 3. Elindítjuk a Vue alkalmazást
+createApp(App).mount('#app')
