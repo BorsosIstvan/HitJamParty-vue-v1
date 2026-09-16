@@ -109,7 +109,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 
 // Import all Vue 3 Core Components
 import AppContainer from './components/AppContainer.vue'
@@ -404,6 +404,14 @@ async function syncUserDataWithPi(field, value) {
     console.error("Network error while syncing with Raspberry Pi:", err)
   }
 }
+// Navigatie-wissels in de gaten houden: als de speler weggaat bij de quiz, stoppen we de audio direct!
+watch(currentView, (newView) => {
+  if (newView !== 'quiz') {
+    stopAudio() // Dit stopt direct de iTunes preview van de quiz
+  }
+})
+
+
 </script>
 
 <style scoped>
