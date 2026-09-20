@@ -1,6 +1,6 @@
 <template>
   <!-- De centrale HitJam mobiele container -->
-  <AppContainer>
+  <AppContainer :class="`theme-${currentSkin}`">
     <h2 style="margin: 0 0 10px 0; ">HITJAM PARTY 🎧</h2>
 
     <!-- PHASE 1: Loading Guest Login / Background process -->
@@ -81,7 +81,10 @@
             :albums="albumData" 
             :ownedAlbumsList="ownedAlbums" 
             :activeAlbumIds="activeAlbumIds" 
+            :username="user"
+            :currentSkin="currentSkin"
             @toggle-album="handleToggleAlbum" 
+            @change-skin="handleSkinChange" 
           />
         </template>
 
@@ -138,6 +141,8 @@ import staticAlbums from './assets/albums.json'
 // Environment configurations
 const PI_IP_CIM = "api.hitjamparty.com"
 
+const currentSkin = ref('skin-default') // Alapértelmezett narancssárga téma
+
 // User & State tracking refs
 const loadingGuest = ref(false)
 const user = ref(null)
@@ -180,7 +185,8 @@ const allAvailableSongs = computed(() => {
 // Amikor az app elindul, azonnal ellenőrizzük a localStorage-t
 onMounted(() => {
   const savedUser = localStorage.getItem('hitjam_user')
-  
+  currentSkin.value = localStorage.getItem('hitjam_active_skin') || 'skin-default'
+
   if (savedUser) {
     // Ha van mentett felhasználó, beolvassuk az összes adatát
     user.value = savedUser
@@ -233,6 +239,8 @@ function handleLogout() {
   localStorage.removeItem('hitjam_owned_albums')
   localStorage.removeItem('hitjam_active_albums')
   localStorage.removeItem('hitjam_pakli')
+  localStorage.removeItem('hitjam_active_skin')
+  currentSkin.value = 'skin-default'
   
   user.value = null
   score.value = 0
@@ -522,6 +530,31 @@ async function syncUserDataWithPi(field, value) {
     return false
   }
 }
+
+// TÉMA VÁLTÁSA ÉS SZINKRONIZÁLÁSA A PI-VEL (ÚJ)
+async function handleSkinChange(newSkinId) {
+  currentSkin.value = newSkinId
+  localStorage.setItem('hitjam_active_skin', newSkinId)
+  
+  console.log(`✨ Interface theme transformed to: ${newSkinId}`)
+
+  // Beküldjük a Pi-re is, hogy megjegyezze! (save_store.php 'toggle' móddal)
+  const targetApiUrl = `https://${PI_IP_CIM}/HitJamParty/save_store.php`
+  try {
+    await fetch(targetApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: user.value,
+        action: 'toggle',
+        activeAlbumIds: [...activeAlbumIds.value, newSkinId] // A skint is hozzácsapjuk a mentett listához
+      })
+    })
+  } catch (err) {
+    console.error("Failed to sync active skin with Pi:", err)
+  }
+}
+
 
 </script>
 

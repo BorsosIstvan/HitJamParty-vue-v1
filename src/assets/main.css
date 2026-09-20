@@ -318,3 +318,17 @@ body {
   color: #ff4500;
   text-shadow: 0 0 8px rgba(255, 69, 0, 0.6);
 }
+
+/* 💜 NEON LILA SKIN */
+.theme-skin-neon-purple {
+  --hitjam-neon: #bc13fe !important;
+  --hitjam-neon-glow: rgba(188, 19, 254, 0.4) !important;
+  --hitjam-accent: #d800ff !important;
+}
+
+/* 🩵❤️ CYBERPUNK BLUE-RED SKIN */
+.theme-skin-neon-cyberpunk {
+  --hitjam-neon: #00f0ff !important;
+  --hitjam-neon-glow: rgba(0, 240, 255, 0.3) !important;
+  --hitjam-accent: #ff0055 !important;
+}

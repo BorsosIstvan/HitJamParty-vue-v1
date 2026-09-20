@@ -2,36 +2,54 @@
   <div class="store-container">
     <h3 class="store-title">HitJam Store 🪙</h3>
     <p class="store-subtitle">
-      Unlock new music albums using your hard-earned coins!
+      Unlock new items using your hard-earned coins!
     </p>
 
+    <!-- SUB-TABS: Switch between Albums and Skines inside the store -->
+    <div class="store-tabs">
+      <button 
+        class="store-tab-btn" 
+        :class="{ active: activeCategory === 'albums' }"
+        @click="activeCategory = 'albums'"
+      >
+        🎵 Albums
+      </button>
+      <button 
+        class="store-tab-btn" 
+        :class="{ active: activeCategory === 'skins' }"
+        @click="activeCategory = 'skins'"
+      >
+        ✨ Skines
+      </button>
+    </div>
+
+    <!-- MAIN MERCHANDISE LIST -->
     <div class="store-list">
-      <!-- In Vue use v-for instead of .map() -->
+      <!-- We loop through the currently active category items -->
       <div 
-        v-for="album in storeOfferings" 
-        :key="album.id" 
+        v-for="item in currentOfferings" 
+        :key="item.id" 
         class="store-card"
-        :class="{ 'owned-card': isOwned(album.id) }"
+        :class="{ 'owned-card': isOwned(item.id) }"
       >
         <div class="album-details">
-          <h4 class="album-title">🔥 {{ album.title }}</h4>
+          <h4 class="album-title">{{ item.title }}</h4>
           <p class="album-price">
-            {{ isOwned(album.id) ? "Successfully purchased!" : `Price: 🪙 ${getAlbumPrice(album)} HitJamCoins` }}
+            {{ isOwned(item.id) ? "Successfully purchased!" : `Price: 🪙 ${getItemPrice(item)} HitJamCoins` }}
           </p>
           <p class="album-description">
-            {{ album.description }}
+            {{ item.description }}
           </p>
         </div>
         
-        <!-- Action Button or Owned Tag -->
         <div class="action-container">
           <button 
-            v-if="!isOwned(album.id)"
+            v-if="!isOwned(item.id)"
             class="hitjam-btn store-buy-btn" 
-            :disabled="coins < getAlbumPrice(album)"
-            @click="emit('purchase', { id: album.id, price: getAlbumPrice(album) })"
+            :disabled="coins < getItemPrice(item)"
+            @click="emit('purchase', { id: item.id, price: getItemPrice(item) })"
           >
-            {{ coins >= getAlbumPrice(album) ? "Buy 🛒" : "Locked 🔒" }}
+            {{ coins >= getItemPrice(item) ? "Buy 🛒" : "Locked 🔒" }}
           </button>
           
           <span v-else class="owned-tag">OWNED</span>
@@ -39,45 +57,55 @@
       </div>
 
       <!-- Empty state illustration -->
-      <p v-if="storeOfferings.length === 0" class="empty-store-text">
-        There are currently no new albums available for purchase.
+      <p v-if="currentOfferings.length === 0" class="empty-store-text">
+        There are currently no items available in this category.
       </p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
+// We importeren de nieuwe skins.json direct in de store
+import staticSkinsData from '../assets/skins.json'
 
-// Define the incoming parameters (React Props) in English
+// De props die we ontvangen van App.vue
 const props = defineProps({
   albums: { type: Array, required: true },
   ownedAlbumsList: { type: Array, default: () => [] },
   coins: { type: Number, default: 0 }
 })
 
-// Define the event to communicate with App.vue (React onVasarlas)
+// De emit om de aankoop omhoog te sturen naar App.vue
 const emit = defineEmits(['purchase'])
 
-// Computed helper to safely track owned items
+// Interne state voor het actieve sub-tabblad in de winkel
+const activeCategory = ref('albums')
+const skinsData = ref(staticSkinsData)
+
+// Veilige lijst van alles wat de speler bezit (zowel albums als skines)
 const safeOwnedList = computed(() => {
   return props.ownedAlbumsList && props.ownedAlbumsList.length > 0 
     ? props.ownedAlbumsList 
     : ['retro-party']
 })
 
-// Filter out the base album, as it's free for everyone
-const storeOfferings = computed(() => {
+// Dynamische weergave op basis van de gekozen categorie (Albums of Skines)
+const currentOfferings = computed(() => {
+  if (activeCategory.value === 'skins') {
+    return skinsData.value
+  }
+  // Filter de gratis basis-album eruit voor de winkel
   return props.albums.filter(album => album.id !== 'retro-party')
 })
 
-// Helper functions for clean template rendering
-function isOwned(albumId) {
-  return safeOwnedList.value.includes(albumId)
+// Helper functies
+function isOwned(itemId) {
+  return safeOwnedList.value.includes(itemId)
 }
 
-function getAlbumPrice(album) {
-  return album.price !== undefined ? album.price : 5
+function getItemPrice(item) {
+  return item.price !== undefined ? item.price : 5
 }
 </script>
 
@@ -99,6 +127,33 @@ function getAlbumPrice(album) {
   margin-bottom: 15px;
 }
 
+/* ÚJ: Sub-tabs styling speciaal binnen de winkel */
+.store-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.store-tab-btn {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 69, 0, 0.2);
+  color: rgba(255, 255, 255, 0.6);
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: bold;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.store-tab-btn.active {
+  border-color: var(--hitjam-neon, #ff4500);
+  color: #fff;
+  background: rgba(255, 69, 0, 0.1);
+  box-shadow: 0 0 10px var(--hitjam-neon-glow, rgba(255, 69, 0, 0.2));
+}
+
 .store-list {
   display: flex;
   flex-direction: column;
@@ -116,7 +171,6 @@ function getAlbumPrice(album) {
   transition: all 0.3s ease;
 }
 
-/* Green dynamic border color if owned */
 .store-card.owned-card {
   border-color: #00ff64;
   background: rgba(0, 255, 100, 0.02);
