@@ -273,28 +273,32 @@ function handlePress(laneIndex) {
 }
 
 // GEOPTIMALISEERDE SNELLE PONT-OMZETTER (100 PUNTEN PER STAP)
+// SZUPERGYORS PÖRGETŐ, AMI CSAK A VÉGÉN KÜLDI EL A COINOKAT A PI-NEK
 function claimCoins() {
   if (gameScore.value < 100 || isPlaying.value || isConverting.value) return
 
   isConverting.value = true
   
-  // We berekenen exact hoeveel we er maximaal af kunnen halen in stappen van 100
   const totalPointsToConvert = gameScore.value - (gameScore.value % 100)
+  const totalCoinsToEarn = Math.floor(totalPointsToConvert / 100) // Kiszámoljuk a végeredményt
   let pointsDeducted = 0
 
   const conversionInterval = setInterval(() => {
     if (pointsDeducted < totalPointsToConvert) {
-      gameScore.value -= 100 // Nu met 100 tegelijk naar beneden!
+      gameScore.value -= 100 // 100-asával pörög le a pontszám
       pointsDeducted += 100
-
-      // Direct 1 Coin doorgeven per 100 punten
-      emit('convert-points', 1)
+      
+      // Ezt az emit-et KIVETTÜK innen, nem küldözgetünk 1-esével semmit!
     } else {
       clearInterval(conversionInterval)
       isConverting.value = false
+
+      // DÖNTŐ LÉPÉS: A pörgetés LEGVÉGÉN egyszerre küldjük el a teljes coin mennyiséget!
+      emit('convert-points', totalCoinsToEarn)
     }
-  }, 50) // Elke 50 milliseconden flitst er 100 punten af, super snel en flitsend!
+  }, 30) // 30ms-enként pörög, így villámgyors lesz 33000 pontnál is!
 }
+
 </script>
 
 <style scoped>

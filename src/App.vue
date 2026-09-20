@@ -377,10 +377,30 @@ function stopAudio() {
 
 // --- SUBSYSTEM INTERACTION HANDLERS (Emits & Events Connectors) ---
 
-function handleCoinsEarned(earnedCoins) {
-  coins.value += earnedCoins
-  syncUserDataWithPi('coins', coins.value)
+// INTELLIGENTE COIN-UPVISUALISATIE: Draait vloeiend lokaal, updatet de Pi slechts 1 keer!
+function handleCoinsEarned(totalCoinsEarned) {
+  if (totalCoinsEarned <= 0) return
+
+  let coinsAdded = 0
+  
+  // We starten een snelle timer om de munten op het scherm één voor één op te laten lopen
+  const visualCoinTimer = setInterval(() => {
+    if (coinsAdded < totalCoinsEarned) {
+      coins.value++  // Dit zie je direct live oplopen in de PlayerStatus bar!
+      coinsAdded++
+    } else {
+      // De visuele teller is klaar!
+      clearInterval(visualCoinTimer)
+
+      // PAS NU sturen we de totale nieuwe coin-status in 1 keer naar de Raspberry Pi!
+      syncUserDataWithPi('coins', coins.value)
+      
+      // Ook direct opslaan in de lokale opslag voor de auto-login
+      localStorage.setItem('hitjam_coins', coins.value)
+    }
+  }, 40) // Elke 40ms komt er op het scherm een muntje bij (super vloeiend effect)
 }
+
 
 function handleToggleAlbum(albumId) {
   if (activeAlbumIds.value.includes(albumId)) {
