@@ -401,75 +401,96 @@ function handleCoinsEarned(totalCoinsEarned) {
   }, 40) // Elke 40ms komt er op het scherm een muntje bij (super vloeiend effect)
 }
 
-
-function handleToggleAlbum(albumId) {
+// A RAKTÁR PIPÁK SZINKRONIZÁLÁSA A PI-VEL
+async function handleToggleAlbum(albumId) {
   if (activeAlbumIds.value.includes(albumId)) {
-    // Alleen uitschakelen als er minimaal 1 album actief blijft
     if (activeAlbumIds.value.length > 1) {
-      activeAlbumIds.value = activeAlbumIds.value.filter(id => id !== albumId)
+      activeAlbumIds.value = activeAlbumIds.value.filter(id => id !== albumId);
     } else {
-      alert("⚠️ You must keep at least one music album active!")
-      return
+      alert("⚠️ You must keep at least one music album active!");
+      return;
     }
   } else {
-    activeAlbumIds.value.push(albumId)
+    activeAlbumIds.value.push(albumId);
   }
-  // Stapel kaarten resetten na aanpassing magazijn
-  deck.value = []
-  localStorage.removeItem('hitjam_pakli')
-  
-  syncUserDataWithPi('active_albums', activeAlbumIds.value.join(', '))
+
+  deck.value = [];
+  localStorage.removeItem('hitjam_pakli');
+  localStorage.setItem('hitjam_active_albums', JSON.stringify(activeAlbumIds.value));
+
+  // Beküldjük a Pi-re a save_store.php 'toggle' módjával!
+  const targetApiUrl = `https://${PI_IP_CIM}/HitJamParty/save_store.php`;
+  try {
+    await fetch(targetApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: user.value,
+        action: 'toggle',
+        activeAlbumIds: activeAlbumIds.value
+      })
+    });
+  } catch (err) {
+    console.error("Failed to sync inventory checkboxes with Pi:", err);
+  }
 }
 
-// A JAVÍTOTT VÁSÁRLÁS: Nincs többé setTimeout, szigorú sorrend van!
-// A TÖKÉLETESÍTETT VÁSÁRLÁS: Csak akkor zöldül be, ha a Pi már elmentette!
+// A JAVÍTOTT VÁSÁRLÁS: Pontosan a save_store.php-t hívja meg, ahogy a Pi kéri!
 async function handlePurchase(payload) {
-  // Biztonsági ellenőrzés a kliens oldalon
   if (coins.value < payload.price) {
     alert("⚠️ You don't have enough coins!");
     return;
   }
 
-  console.log("🚀 Starting purchase process with Raspberry Pi...");
-
-  // 1. LÉPÉS: Először elmentjük a csökkentett coinokat a Pi-re
+  console.log("🚀 Connecting to save_store.php on Raspberry Pi...");
+  
+  const targetApiUrl = `https://${PI_IP_CIM}/HitJamParty/save_store.php`;
   const újCoinÖsszeg = coins.value - payload.price;
-  const coinMentésSikerült = await syncUserDataWithPi('coins', újCoinÖsszeg);
-  
-  if (!coinMentésSikerült) {
-    alert("❌ Failed to update coins on Raspberry Pi. Purchase cancelled.");
-    return; // MEGÁLLÍTJUK a folyamatot, ha a szerver nem válaszol!
+
+  try {
+    // Egyetlen kéréssel elküldünk mindent a Pi-nek, pontosan úgy, ahogy a save_store.php várja!
+    const response = await fetch(targetApiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: user.value,
+        action: 'buy',
+        album_id: payload.id,
+        coins: újCoinÖsszeg
+      })
+    });
+
+    if (!response.ok) throw new Error("Network communication error");
+    
+    const data = await response.json();
+
+    if (data.success) {
+      // =====================================================================
+      // CSAK AKKOR ZÖLDÜL BE ÉS FRISSÜL HELYBEN, HA A PI SIKERESEN MENTETT!
+      // =====================================================================
+      coins.value = újCoinÖsszeg;
+      ownedAlbums.value.push(payload.id);
+      activeAlbumIds.value.push(payload.id);
+      
+      // Reseteljük a paklit az új dalok miatt
+      deck.value = [];
+      localStorage.removeItem('hitjam_pakli');
+
+      // Frissítjük a localStorage-ot az auto-loginhoz
+      localStorage.setItem('hitjam_coins', coins.value);
+      localStorage.setItem('hitjam_owned_albums', JSON.stringify(ownedAlbums.value));
+      localStorage.setItem('hitjam_active_albums', JSON.stringify(activeAlbumIds.value));
+
+      console.log("🎉 Purchase successfully registered in Pi SQLite database!");
+    } else {
+      alert(`❌ Server error: ${data.error}`);
+    }
+
+  } catch (err) {
+    console.error("Purchase error:", err);
+    alert("❌ Could not reach Raspberry Pi database. Purchase cancelled.");
   }
-
-  // 2. LÉPÉS: Beküldjük a Pi-re az albumvásárlást (az SQLite user_albums táblába)
-  const albumMentésSikerült = await syncUserDataWithPi('buy_album', payload.id);
-  
-  if (!albumMentésSikerült) {
-    alert("❌ Failed to register album on Raspberry Pi. Please contact support.");
-    // Visszaadjuk a coinokat a biztonság kedvéért, ha a folyamat fele elbukott
-    await syncUserDataWithPi('coins', coins.value);
-    return;
-  }
-
-  // =====================================================================
-  // 3. LÉPÉS: CSAK MOST, ha a Pi MINDENT visszaigazolt, frissítünk helyben!
-  // =====================================================================
-  coins.value = újCoinÖsszeg;
-  ownedAlbums.value.push(payload.id);
-  activeAlbumIds.value.push(payload.id);
-  
-  // Reseteljük a paklit az új dalok miatt
-  deck.value = [];
-  localStorage.removeItem('hitjam_pakli');
-
-  // Frissítjük a localStorage-ot az auto-loginhoz
-  localStorage.setItem('hitjam_coins', coins.value);
-  localStorage.setItem('hitjam_owned_albums', JSON.stringify(ownedAlbums.value));
-  localStorage.setItem('hitjam_active_albums', JSON.stringify(activeAlbumIds.value));
-
-  console.log("🎉 Success! Purchase officially written to Pi SQLite and updated in Vue!");
 }
-
 
 // --- SERVER COMMUNICATION LOGIC (Raspberry Pi Sync Engine) ---
 
