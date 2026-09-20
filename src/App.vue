@@ -177,6 +177,32 @@ const allAvailableSongs = computed(() => {
 
 // --- CORE APPLICATIE LOGICA FUNCTIONS ---
 
+// Amikor az app elindul, azonnal ellenőrizzük a localStorage-t
+onMounted(() => {
+  const savedUser = localStorage.getItem('hitjam_user')
+  
+  if (savedUser) {
+    // Ha van mentett felhasználó, beolvassuk az összes adatát
+    user.value = savedUser
+    score.value = parseInt(localStorage.getItem('hitjam_score') || '0', 10)
+    coins.value = parseInt(localStorage.getItem('hitjam_coins') || '0', 10)
+    
+    try {
+      ownedAlbums.value = JSON.parse(localStorage.getItem('hitjam_owned_albums') || '[]')
+      activeAlbumIds.value = JSON.parse(localStorage.getItem('hitjam_active_albums') || '[]')
+    } catch (e) {
+      ownedAlbums.value = ['retro-party']
+      activeAlbumIds.value = ['retro-party']
+    }
+  }
+
+  // Megpróbáljuk betölteni a kártyapaklit is, ha van
+  const savedDeck = localStorage.getItem('hitjam_pakli')
+  if (savedDeck) {
+    try { deck.value = JSON.parse(savedDeck) } catch(e) { deck.value = [] }
+  }
+})
+
 function handleSuccessLogin(playerData) {
   user.value = playerData.username
   score.value = playerData.score
@@ -184,7 +210,13 @@ function handleSuccessLogin(playerData) {
   ownedAlbums.value = playerData.ownedAlbums || []
   activeAlbumIds.value = playerData.activeAlbumIds || []
   
-  // Proberen we de opgeslagen kaartstapel te laden uit het geheugen
+  // ÚJ: Elmentjük az adatokat a localStorage-ba az auto-loginhoz
+  localStorage.setItem('hitjam_user', playerData.username)
+  localStorage.setItem('hitjam_score', playerData.score)
+  localStorage.setItem('hitjam_coins', playerData.coins)
+  localStorage.setItem('hitjam_owned_albums', JSON.stringify(playerData.ownedAlbums || []))
+  localStorage.setItem('hitjam_active_albums', JSON.stringify(playerData.activeAlbumIds || []))
+
   const savedDeck = localStorage.getItem('hitjam_pakli')
   if (savedDeck) {
     try { deck.value = JSON.parse(savedDeck) } catch(e) { deck.value = [] }
@@ -193,6 +225,15 @@ function handleSuccessLogin(playerData) {
 
 function handleLogout() {
   stopAudio()
+  
+  // ÚJ: Töröljük a belépési adatokat a localStorage-ból
+  localStorage.removeItem('hitjam_user')
+  localStorage.removeItem('hitjam_score')
+  localStorage.removeItem('hitjam_coins')
+  localStorage.removeItem('hitjam_owned_albums')
+  localStorage.removeItem('hitjam_active_albums')
+  localStorage.removeItem('hitjam_pakli')
+  
   user.value = null
   score.value = 0
   coins.value = 0
