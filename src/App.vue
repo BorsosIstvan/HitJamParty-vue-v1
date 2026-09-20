@@ -1,7 +1,7 @@
 <template>
   <!-- De centrale HitJam mobiele container -->
   <AppContainer>
-    <h2 style="margin: 0 0 10px 0; letter-spacing: 2px;">HITJAM PARTY 🎧</h2>
+    <h2 style="margin: 0 0 10px 0; ">HITJAM PARTY 🎧</h2>
 
     <!-- PHASE 1: Loading Guest Login / Background process -->
     <div v-if="loadingGuest && !user" style="margin: 40px 0;">
