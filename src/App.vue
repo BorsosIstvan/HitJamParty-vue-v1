@@ -421,29 +421,41 @@ function handleToggleAlbum(albumId) {
   syncUserDataWithPi('active_albums', activeAlbumIds.value.join(', '))
 }
 
-function handlePurchase(payload) {
+// A JAVÍTOTT VÁSÁRLÁS: Nincs többé setTimeout, szigorú sorrend van!
+async function handlePurchase(payload) {
   if (coins.value >= payload.price) {
+    // 1. Levonjuk a coinokat helyben
     coins.value -= payload.price
-    ownedAlbums.value.push(payload.id)
-    activeAlbumIds.value.push(payload.id) // Direct activeren na aankoop
     
-    // Stapel kaarten resetten na aankoop
+    // 2. Hozzáadjuk az albumot a birtokoltakhoz és az aktívakhoz helyben
+    ownedAlbums.value.push(payload.id)
+    activeAlbumIds.value.push(payload.id)
+    
+    // 3. Reseteljük a paklit, hogy az új dalok is belekerülhessenek
     deck.value = []
     localStorage.removeItem('hitjam_pakli')
 
-    // Beiden updates naar de Pi sturen via de API
-    syncUserDataWithPi('coins', coins.value)
-    // Vertraagde sync voor de albumlijst om serverconflicten te voorkomen
-    setTimeout(() => {
-      syncUserDataWithPi('buy_album', payload.id)
-    }, 300)
+    // 4. Frissítjük a localStorage-ot az auto-loginhoz
+    localStorage.setItem('hitjam_coins', coins.value)
+    localStorage.setItem('hitjam_owned_albums', JSON.stringify(ownedAlbums.value))
+    localStorage.setItem('hitjam_active_albums', JSON.stringify(activeAlbumIds.value))
+
+    // 5. BEKÜLDJÜK A PI-RE: Megvárjuk, amíg a Coin mentése SIKERESEN lefut
+    await syncUserDataWithPi('coins', coins.value)
+    
+    // 6. BEKÜLDJÜK A PI-RE AZ ALBUMOT: Megvárjuk, amíg az új albumot is beírja az SQLite-ba
+    await syncUserDataWithPi('buy_album', payload.id)
+    
+    console.log("🎉 Purchase successfully synced with Raspberry Pi database!");
   }
 }
 
+
 // --- SERVER COMMUNICATION LOGIC (Raspberry Pi Sync Engine) ---
 
+// A JAVÍTOTT SZINKRONIZÁCIÓ: Most már megvárható (Promise) és visszajelzést ad
 async function syncUserDataWithPi(field, value) {
-  if (!user.value) return
+  if (!user.value) return false
   
   const updateApiUrl = `https://${PI_IP_CIM}/HitJamParty/update_user.php`
   
@@ -458,20 +470,17 @@ async function syncUserDataWithPi(field, value) {
       })
     })
     const data = await response.json()
-    if (!data.success) {
+    if (data.success) {
+      return true // SIKER! Az adatbázis frissült a Pi-n
+    } else {
       console.error(`Pi sync failed for ${field}:`, data.error)
+      return false
     }
   } catch (err) {
     console.error("Network error while syncing with Raspberry Pi:", err)
+    return false
   }
 }
-// Navigatie-wissels in de gaten houden: als de speler weggaat bij de quiz, stoppen we de audio direct!
-watch(currentView, (newView) => {
-  if (newView !== 'quiz') {
-    stopAudio() // Dit stopt direct de iTunes preview van de quiz
-  }
-})
-
 
 </script>
 
